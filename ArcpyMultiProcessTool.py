@@ -1,10 +1,11 @@
 # -*- coding: utf-8 -*-
-_Release = "Arcpy MultiProcessing Release V0.2"
-_ReleaseDate = "2016/12/02"
+_Release = "Arcpy MultiProcessing Release V0.3"
+_ReleaseDate = "2016/12/03"
 _Authur = "Cheng-Wei Sun"
-print("\n{}\n{} by {}\n".format(_Release,_ReleaseDate,_Authur))
+if __name__ == "__main__":
+    print("\n{}\n{} by {}\n".format(_Release,_ReleaseDate,_Authur))
 """
-last edited 2016-12-02 2307 @ Sun Home
+last edited 2016-12-03 1500 @ Sun Home
 @author: Sun, Cheng-Wei
 
 Tested platform:
@@ -32,6 +33,11 @@ first version.
 #Remove all content and function related to  pyGDAL.
 #Make the stdout more clean (only main process will display importing information).
 
+20161202-1500 v0.3
+#Add Hillshade mode
+#Change Parser to become more flexible :  (1)Directory (2)Mode maintain fixed.
+## Use -t=2 to specify the number of threads
+## Use -e=ext to  specify the file extention, default : tif
 """
 
 #===== Built-in libraries =====
@@ -172,8 +178,75 @@ def Parser():
     #multi_task_py2(FileList,Threats)
     return 
 
-#Make slope function :
-def ArcPyMakeHillshade(q,OutputDir,Ext):
+def Parser2():
+    global Threats
+    global Mode
+    global Directory
+    global OutputDir
+    global Ext
+    global FileList
+    argv=sys.argv
+    argc=len(argv)
+    # --- Parse ---
+    if argc == 1 : # No other argument
+       PrintHelp()
+    elif argc < 3:
+        print("Insufficient arguments")
+        PrintHelp()
+    for i in range(1,argc):
+        if i == 1:
+            if not oph.isdir(argv[i]) :
+                print("First argument should be a directory.\n")
+                PrintHelp()
+            Directory = oph.abspath(argv[i])
+            #Change working directory where raster files exists.
+            os.chdir(Directory) 
+            OutputDir="DEM_Processing_"+time.strftime("%Y%m%d_%H%M%S",time.localtime())
+            os.mkdir("DEM_Processing_"+time.strftime("%Y%m%d_%H%M%S",time.localtime()))
+            OutputDir=oph.abspath(OutputDir)
+            env.workspace = Directory
+            #DEBUG
+            #print("OutputDir : {}".format(OutputDir))
+            #print("Directory : {}".format(Directory))
+            #print("os.getcwd() : {}".format(os.getcwd()))
+            #!DEBUG
+        elif i == 2:
+            Mode = argv[i].lower()            
+            if argv[i].lower() not in ['hillshade','slope']:
+                print("Mode should be either 'hillshade' or 'slope'")
+                PrintHelp()
+            #DEBUG            
+            #print("Mode : {}".format(Mode))
+            #!DEBUG
+        if   argv[i].startswith("-") : #Valid argument
+            arg = argv[i].split("=")
+            #----- -t : Threads -----
+            if arg[0].lower() == "-t":
+                if int(arg[1]) > mps.cpu_count() or int(arg[1]) == 0:
+                    print("Please give correct threads. Your PC has {} threads.".format(mps.cpu_count()))
+                    sys.exit()      
+                Threats = int(arg[1])
+            #----- -e : file extension -----
+            elif arg[0].lower() == "-e":
+                # Check if extension was supported by ArcGIS.
+                #https://pro.arcgis.com/en/pro-app/help/data/imagery/supported-raster-dataset-file-formats.htm
+                if arg[1] in ["img","asc","bil","bip","bsq","hdr","clr","stx","bmp","bpw","raw","dat","bsq"\
+                ,"ige","igw","stk","gif","gfw","jpg","jpeg","jpc","jpe","jgw","jp2", "j2c","j2k","jpx","png","tiff","tif","tff","twf"]:
+                    Ext = arg[1]
+                else:
+                    print("The file format '{}' is not supported.\nSupported file extension is {}".format(\
+                        arg[1],'''"img","tiff","tif","tff","twf","asc","bil","bip","bsq","hdr","clr","stx","bmp","bpw","raw","dat","bsq","ige","igw","stk","gif","gfw","jpg","jpeg","jpc","jpe","jgw","jp2","j2c","j2k","jpx","png" ''' ) )
+                    sys.exit()
+            #----- else : raise error -----
+            else:
+                print("Unreconized argument {}".format(argv[i]))
+                sys.exit()
+    FileList = dirloader(Directory,Ext)
+    print("Found raster files : {}".format(len(FileList)))
+    return
+
+#===== Make slope function  =====
+def ArcPyMakeSlope(q,OutputDir,Ext):
     '''Syntax : Slope_3d (in_raster, out_raster, {output_measurement}, {z_factor})    
     '''
     name = mps.current_process().name
@@ -190,22 +263,43 @@ def ArcPyMakeHillshade(q,OutputDir,Ext):
         arcpy.Slope_3d(input_file,OutRaster)
         q.task_done()
     q.task_done()
+#===== Make Hillshade function  =====
+def ArcPyMakeHillshade(q,OutputDir,Ext):
+    name = mps.current_process().name
+    pid=mps.current_process().pid
+    print("**" + name + ' Starting **')
+    while(True):
+        input_file=q.get()
+        if  input_file == "*done*":
+            print("**" + name + ' Exiting **')
+            break
+        #arcpy.CheckExtension("3D")
+        print("Porcessing raster : {} @ {} ,pid = {}".format(oph.basename(input_file),name,pid) )
+        OutRaster = oph.join(OutputDir,oph.basename(input_file).split(".")[0]+"_shd.{}".format(Ext))
+        arcpy.HillShade_3d(input_file,OutRaster)
+        q.task_done()
+    q.task_done()
 if __name__ == "__main__":
     Parser()
-    print("Threats {},\n\
+    '''print("Threats {},\n\
 Mode {} ,\n\
 Directory {},\n\
 OutputDir {} ,\n\
 Ext {} ,\n\
 env.workspace {} ,\n\
-FileList {}\n".format(Threats,Mode,Directory,OutputDir,Ext,env.workspace,FileList))
+FileList {}\n".format(Threats,Mode,Directory,OutputDir,Ext,env.workspace,FileList))'''
     for i in range(Threats):
         q.put("*done*")
-    for i in range(Threats):
-        p = mps.Process(name="Process {}".format(i),target=ArcPyMakeHillshade,args=(q,OutputDir,Ext))
-        p.start()
+    if Mode == "slope":
+        for i in range(Threats):
+            p = mps.Process(name="Process {}".format(i),target=ArcPyMakeSlope,args=(q,OutputDir,Ext))
+            p.start()
+    if Mode == "hillshade":
+        for i in range(Threats):
+            p = mps.Process(name="Process {}".format(i),target=ArcPyMakeHillshade,args=(q,OutputDir,Ext))
+            p.start()
     for i in range(Threats):
         p.join()
     print("Check if all files in the queue are processed... If not, kill the process by 'ctrl+c'")
     q.join()
-    print("Done! Time : {} s".format(time.time()-Ts))
+    print("All Done! Time : {} s".format(time.time()-Ts))
