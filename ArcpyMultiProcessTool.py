@@ -77,11 +77,11 @@ except:
     sys.exit()
 #======== Help  ==========
 def PrintHelp():
-    print("Usage : python DEMProcessing.py (1)Directory (2)Mode (3)Extentions (4)Threats")
+    print("Usage : python DEMProcessing.py (1)Directory (2)Mode (3)-e=Extentions (4)-t=Threats")
     print("(1)Directory : Give the directory and the script will process all the rasters.")
     print("(2)Mode : 'hillshade' , 'slope'")
-    print("(3)Extentions : give the extention of the raster. Default is 'tif'")
-    print("(4)Threads : defaults = 2")
+    print("(3)-e=Extentions : give the extention of the raster. Default is 'tif'")
+    print("(4)-t=Threads : defaults = 2")
     sys.exit()
 #===== Global Variable =====
 Threats = 2
@@ -280,7 +280,7 @@ def ArcPyMakeHillshade(q,OutputDir,Ext):
         q.task_done()
     q.task_done()
 if __name__ == "__main__":
-    Parser()
+    Parser2()
     '''print("Threats {},\n\
 Mode {} ,\n\
 Directory {},\n\
